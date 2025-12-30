@@ -1,5 +1,5 @@
 #[cfg(test)]
-use crate::{parser::{*},lexer::{*},error::{*}};
+use crate::{error::*, lexer::*, parser::*};
 
 #[test]
 fn lexer_token_generation() {
@@ -89,7 +89,9 @@ fn ast_gen_test() {
 #[test]
 fn ast_currying_test() {
     let code = r#"
-    fn x(a:int):(b:int):int{ return a; }
+    fn x(a:int):(int):int {
+        return 5;
+    }
     "#;
     let mut tokenizer = Tokenizer::new(code);
     let tokens = tokenizer.tokenize(true);
@@ -103,6 +105,6 @@ fn ast_currying_test() {
     let ast = parser.parse_program();
     // work on adding the assert
     // assert!(ast,Program{..})
-    println!("{:?}",ast);
-   assert!(matches!(ast,Ok(_)));
+    println!("{:?}", ast);
+    assert!(matches!(ast, Ok(_)));
 }

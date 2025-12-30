@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
-use crate::lexer::{Token, TokenType};
 use crate::error::{EtherError, EtherResult, ParserError};
+use crate::lexer::{Token, TokenType};
 
 // ================= AST =================
 
@@ -38,9 +38,9 @@ pub struct StructDef {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct FunctionHeader{
+pub struct FunctionHeader {
     pub name: Option<String>,
-    pub params: Vec<(String, Type)>,
+    pub params: Vec<(Option<String>, Type)>,
     pub return_type: Box<Type>,
 }
 
@@ -94,6 +94,7 @@ pub enum Expr {
     Call(Box<Expr>, Vec<Expr>),
     Field(Box<Expr>, String),
     Index(Box<Expr>, Box<Expr>),
+    Function(Function),
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -107,9 +108,18 @@ pub enum Literal {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum BinOp {
-    Add, Sub, Mul, Div,
-    Eq, Ne, Lt, Gt, Le, Ge,
-    And, Or,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Eq,
+    Ne,
+    Lt,
+    Gt,
+    Le,
+    Ge,
+    And,
+    Or,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -133,12 +143,10 @@ impl Parser {
     // ---------- core helpers ----------
 
     fn peek(&self) -> EtherResult<TokenType> {
-       self.tokens
+        self.tokens
             .get(self.pos)
             .map(|t| t.token_type.clone())
-            .ok_or_else(|| EtherError::Parser(ParserError::new(
-                "Unexpected end of input".into(),
-            )))
+            .ok_or_else(|| EtherError::Parser(ParserError::new("Unexpected end of input".into())))
     }
 
     fn next(&mut self) -> EtherResult<TokenType> {
@@ -183,7 +191,10 @@ impl Parser {
             declarations.push(self.parse_declaration()?);
         }
 
-        Ok(Program { imports, declarations })
+        Ok(Program {
+            imports,
+            declarations,
+        })
     }
 
     fn parse_import(&mut self) -> EtherResult<Import> {
@@ -226,23 +237,25 @@ impl Parser {
                 Ok(Type::Array(Box::new(t)))
             }
             TokenType::LParen => {
-            let mut params = Vec::new();
-            if self.peek()? != TokenType::RParen {
-                loop {
-                    let pname = self.expect_ident()?;
-                    self.expect(TokenType::Colon)?;
-                    let ptype = self.parse_type()?;
-                    params.push((pname, ptype));
-                    if self.peek()? != TokenType::Comma {
-                        break;
-                    }
-                    self.next()?;
+                let mut params = Vec::new();
+                if self.peek()? != TokenType::RParen {
+                    loop {
+                        let ptype = self.parse_type()?;
+                        params.push((None,ptype));
+                        if self.peek()? != TokenType::Comma {
+                            break;
+                        }
+                        self.next()?;
                     }
                 }
                 self.expect(TokenType::RParen)?;
                 self.expect(TokenType::Colon)?;
                 let ret = self.parse_type()?;
-                Ok(Type::Function(FunctionHeader{name:None,params,return_type:Box::new(ret)}))
+                Ok(Type::Function(FunctionHeader {
+                    name: None,
+                    params:params,
+                    return_type: Box::new(ret),
+                }))
             }
             t => Err(EtherError::Parser(ParserError::new(format!(
                 "Invalid type: {:?}",
@@ -259,7 +272,7 @@ impl Parser {
         self.expect(TokenType::LBrace)?;
 
         let mut fields = Vec::new();
-        if self.peek()?!= TokenType::RBrace {
+        if self.peek()? != TokenType::RBrace {
             loop {
                 let fname = self.expect_ident()?;
                 self.expect(TokenType::Colon)?;
@@ -288,7 +301,7 @@ impl Parser {
                 let pname = self.expect_ident()?;
                 self.expect(TokenType::Colon)?;
                 let ptype = self.parse_type()?;
-                params.push((pname, ptype));
+                params.push((Some(pname), ptype));
                 if self.peek()? != TokenType::Comma {
                     break;
                 }
@@ -301,7 +314,14 @@ impl Parser {
         let return_type = self.parse_type()?;
         let body = self.parse_block()?;
 
-        Ok(Function { header:FunctionHeader{name:Some(name), params, return_type:Box::new(return_type)}, body })
+        Ok(Function {
+            header: FunctionHeader {
+                name: Some(name),
+                params,
+                return_type: Box::new(return_type),
+            },
+            body,
+        })
     }
 
     fn parse_block(&mut self) -> EtherResult<Block> {
@@ -375,7 +395,11 @@ impl Parser {
             None
         };
 
-        Ok(Stmt::If { cond, then_block, else_block })
+        Ok(Stmt::If {
+            cond,
+            then_block,
+            else_block,
+        })
     }
 
     fn parse_while(&mut self) -> EtherResult<Stmt> {
@@ -502,7 +526,7 @@ impl Parser {
                 TokenType::LParen => {
                     self.next()?;
                     let mut args = Vec::new();
-                    if self.peek()?!= TokenType::RParen {
+                    if self.peek()? != TokenType::RParen {
                         args.push(self.parse_expr()?);
                         while self.peek()? == TokenType::Comma {
                             self.next()?;

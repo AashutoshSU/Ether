@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
+use crate::error::{EtherError, EtherResult};
 use std::fmt;
-use crate::error::{EtherResult,EtherError};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenType {
@@ -18,7 +18,7 @@ pub enum TokenType {
     True,
     False,
     Struct,
-    
+
     // Type keywords
     Int,
     Float,
@@ -26,21 +26,21 @@ pub enum TokenType {
     String,
     Char,
     Void,
-    
+
     // Literals
     Number(String),
-    FloatLit(String),  // Added for floating-point numbers
+    FloatLit(String), // Added for floating-point numbers
     StringLit(String),
     CharLit(char),
     Identifier(String),
-    
+
     // Operators
     Plus,
     Minus,
     Multiply,
     Divide,
     Assign,
-    
+
     // Comparison operators
     Eq,
     Ne,
@@ -48,12 +48,12 @@ pub enum TokenType {
     Gt,
     Le,
     Ge,
-    
+
     // Logical operators
     And,
     Or,
     Not,
-    
+
     // Delimiters
     LParen,
     RParen,
@@ -66,7 +66,7 @@ pub enum TokenType {
     Colon,
     Dot,
     Arrow,
-    
+
     // Special
     Eof,
     Comment(String),
@@ -91,7 +91,11 @@ impl Token {
 
 impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Token({:?} at {}:{})", self.token_type, self.line, self.column)
+        write!(
+            f,
+            "Token({:?} at {}:{})",
+            self.token_type, self.line, self.column
+        )
     }
 }
 
@@ -111,7 +115,7 @@ impl Tokenizer {
             column: 1,
         }
     }
-    
+
     fn current_char(&self) -> Option<char> {
         if self.pos >= self.source.len() {
             None
@@ -119,7 +123,7 @@ impl Tokenizer {
             Some(self.source[self.pos])
         }
     }
-    
+
     fn peek_char(&self, offset: usize) -> Option<char> {
         let pos = self.pos + offset;
         if pos >= self.source.len() {
@@ -128,7 +132,7 @@ impl Tokenizer {
             Some(self.source[pos])
         }
     }
-    
+
     fn advance(&mut self) -> Option<char> {
         if self.pos >= self.source.len() {
             return None;
@@ -143,7 +147,7 @@ impl Tokenizer {
         }
         Some(ch)
     }
-    
+
     fn skip_whitespace(&mut self) {
         while let Some(ch) = self.current_char() {
             if ch.is_whitespace() {
@@ -153,15 +157,15 @@ impl Tokenizer {
             }
         }
     }
-    
+
     fn read_single_line_comment(&mut self) -> Token {
         let start_line = self.line;
         let start_col = self.column;
         let mut value = String::new();
-        
+
         self.advance(); // /
         self.advance(); // /
-        
+
         while let Some(ch) = self.current_char() {
             if ch == '\n' {
                 break;
@@ -169,22 +173,22 @@ impl Tokenizer {
             value.push(ch);
             self.advance();
         }
-        
+
         if self.current_char() == Some('\n') {
             self.advance();
         }
-        
+
         Token::new(TokenType::Comment(value), start_line, start_col)
     }
-    
+
     fn read_multi_line_comment(&mut self) -> Token {
         let start_line = self.line;
         let start_col = self.column;
         let mut value = String::new();
-        
+
         self.advance(); // /
         self.advance(); // *
-        
+
         while let Some(ch) = self.current_char() {
             if ch == '*' && self.peek_char(1) == Some('/') {
                 self.advance(); // *
@@ -194,22 +198,25 @@ impl Tokenizer {
             value.push(ch);
             self.advance();
         }
-        
+
         Token::new(TokenType::Comment(value), start_line, start_col)
     }
-    
+
     fn read_number(&mut self) -> Token {
         let start_line = self.line;
         let start_col = self.column;
         let mut value = String::new();
         let mut is_float = false;
-        
+
         // Read integer part
         while let Some(ch) = self.current_char() {
             if ch.is_ascii_digit() {
                 value.push(ch);
                 self.advance();
-            } else if ch == '.' && !is_float && self.peek_char(1).map_or(false, |c| c.is_ascii_digit()) {
+            } else if ch == '.'
+                && !is_float
+                && self.peek_char(1).map_or(false, |c| c.is_ascii_digit())
+            {
                 // Only treat as float if there's a digit after the dot
                 is_float = true;
                 value.push(ch);
@@ -218,21 +225,21 @@ impl Tokenizer {
                 break;
             }
         }
-        
+
         let token_type = if is_float {
             TokenType::FloatLit(value)
         } else {
             TokenType::Number(value)
         };
-        
+
         Token::new(token_type, start_line, start_col)
     }
-    
+
     fn read_identifier(&mut self) -> Token {
         let start_line = self.line;
         let start_col = self.column;
         let mut value = String::new();
-        
+
         while let Some(ch) = self.current_char() {
             if ch.is_alphanumeric() || ch == '_' {
                 value.push(ch);
@@ -241,7 +248,7 @@ impl Tokenizer {
                 break;
             }
         }
-        
+
         // Check if it's a keyword
         let token_type = match value.as_str() {
             "fn" => TokenType::Fn,
@@ -264,14 +271,14 @@ impl Tokenizer {
             "void" => TokenType::Void,
             _ => TokenType::Identifier(value),
         };
-        
+
         Token::new(token_type, start_line, start_col)
     }
-    
+
     fn unescape_string(s: &str) -> String {
         let mut result = String::new();
         let mut chars = s.chars();
-        
+
         while let Some(ch) = chars.next() {
             if ch == '\\' {
                 match chars.next() {
@@ -291,17 +298,17 @@ impl Tokenizer {
                 result.push(ch);
             }
         }
-        
+
         result
     }
-    
+
     fn read_string(&mut self) -> Token {
         let start_line = self.line;
         let start_col = self.column;
         let mut value = String::new();
-        
+
         self.advance(); // opening "
-        
+
         while let Some(ch) = self.current_char() {
             if ch == '"' {
                 break;
@@ -318,67 +325,88 @@ impl Tokenizer {
                 self.advance();
             }
         }
-        
+
         if self.current_char() == Some('"') {
             self.advance(); // closing "
         }
-        
+
         // Unescape the string
         let unescaped = Self::unescape_string(&value);
         Token::new(TokenType::StringLit(unescaped), start_line, start_col)
     }
-    
+
     fn read_char(&mut self) -> Token {
         let start_line = self.line;
         let start_col = self.column;
-        
+
         self.advance(); // opening '
-        
+
         let ch = if let Some('\\') = self.current_char() {
             self.advance(); // consume \
             match self.current_char() {
-                Some('n') => { self.advance(); '\n' }
-                Some('t') => { self.advance(); '\t' }
-                Some('r') => { self.advance(); '\r' }
-                Some('\'') => { self.advance(); '\'' }
-                Some('\\') => { self.advance(); '\\' }
-                Some('"') => { self.advance(); '"' }
-                Some('0') => { self.advance(); '\0' }
+                Some('n') => {
+                    self.advance();
+                    '\n'
+                }
+                Some('t') => {
+                    self.advance();
+                    '\t'
+                }
+                Some('r') => {
+                    self.advance();
+                    '\r'
+                }
+                Some('\'') => {
+                    self.advance();
+                    '\''
+                }
+                Some('\\') => {
+                    self.advance();
+                    '\\'
+                }
+                Some('"') => {
+                    self.advance();
+                    '"'
+                }
+                Some('0') => {
+                    self.advance();
+                    '\0'
+                }
                 Some(c) => {
                     // Invalid escape: treat as literal character
                     let result = c;
                     self.advance();
                     result
                 }
-                None => '\0'
+                None => '\0',
             }
         } else {
             let result = self.current_char().unwrap_or('\0');
             self.advance();
             result
         };
-        
+
         if self.current_char() == Some('\'') {
             self.advance(); // closing '
         }
-        
+
         Token::new(TokenType::CharLit(ch), start_line, start_col)
     }
-    
+
     pub fn tokenize(&mut self, skip_comments: bool) -> Vec<Token> {
         let mut tokens = Vec::new();
-        
+
         while self.pos < self.source.len() {
             self.skip_whitespace();
-            
+
             if self.current_char().is_none() {
                 break;
             }
-            
+
             let ch = self.current_char().unwrap();
             let start_line = self.line;
             let start_col = self.column;
-            
+
             // Comments
             if ch == '/' && self.peek_char(1) == Some('/') {
                 let token = self.read_single_line_comment();
@@ -387,7 +415,7 @@ impl Tokenizer {
                 }
                 continue;
             }
-            
+
             if ch == '/' && self.peek_char(1) == Some('*') {
                 let token = self.read_multi_line_comment();
                 if !skip_comments {
@@ -395,31 +423,31 @@ impl Tokenizer {
                 }
                 continue;
             }
-            
+
             // Numbers (including floats)
             if ch.is_ascii_digit() {
                 tokens.push(self.read_number());
                 continue;
             }
-            
+
             // Identifiers and keywords
             if ch.is_alphabetic() || ch == '_' {
                 tokens.push(self.read_identifier());
                 continue;
             }
-            
+
             // String literals
             if ch == '"' {
                 tokens.push(self.read_string());
                 continue;
             }
-            
+
             // Char literals
             if ch == '\'' {
                 tokens.push(self.read_char());
                 continue;
             }
-            
+
             // Two-character operators
             if ch == '=' && self.peek_char(1) == Some('=') {
                 tokens.push(Token::new(TokenType::Eq, start_line, start_col));
@@ -427,49 +455,49 @@ impl Tokenizer {
                 self.advance();
                 continue;
             }
-            
+
             if ch == '!' && self.peek_char(1) == Some('=') {
                 tokens.push(Token::new(TokenType::Ne, start_line, start_col));
                 self.advance();
                 self.advance();
                 continue;
             }
-            
+
             if ch == '<' && self.peek_char(1) == Some('=') {
                 tokens.push(Token::new(TokenType::Le, start_line, start_col));
                 self.advance();
                 self.advance();
                 continue;
             }
-            
+
             if ch == '>' && self.peek_char(1) == Some('=') {
                 tokens.push(Token::new(TokenType::Ge, start_line, start_col));
                 self.advance();
                 self.advance();
                 continue;
             }
-            
+
             if ch == '&' && self.peek_char(1) == Some('&') {
                 tokens.push(Token::new(TokenType::And, start_line, start_col));
                 self.advance();
                 self.advance();
                 continue;
             }
-            
+
             if ch == '|' && self.peek_char(1) == Some('|') {
                 tokens.push(Token::new(TokenType::Or, start_line, start_col));
                 self.advance();
                 self.advance();
                 continue;
             }
-            
+
             if ch == '-' && self.peek_char(1) == Some('>') {
                 tokens.push(Token::new(TokenType::Arrow, start_line, start_col));
                 self.advance();
                 self.advance();
                 continue;
             }
-            
+
             // Single-character tokens
             let token_type = match ch {
                 '+' => Some(TokenType::Plus),
@@ -492,18 +520,21 @@ impl Tokenizer {
                 '.' => Some(TokenType::Dot),
                 _ => None,
             };
-            
+
             if let Some(tt) = token_type {
                 tokens.push(Token::new(tt, start_line, start_col));
                 self.advance();
                 continue;
             }
-            
+
             // Unknown character - skip with warning (could be logged in production)
-            eprintln!("Warning: Skipping unknown character '{}' at {}:{}", ch, start_line, start_col);
+            eprintln!(
+                "Warning: Skipping unknown character '{}' at {}:{}",
+                ch, start_line, start_col
+            );
             self.advance();
         }
-        
+
         // Add EOF token
         tokens.push(Token::new(TokenType::Eof, self.line, self.column));
         tokens
