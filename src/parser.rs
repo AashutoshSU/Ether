@@ -2,18 +2,18 @@
 
 use crate::lexer::{Token, TokenType};
 
-#[derive(Debug)]
+#[derive(Debug,PartialEq,Eq)]
 pub struct Program {
     pub imports: Vec<Import>,
     pub declarations: Vec<Declaration>,
 }
 
-#[derive(Debug)]
+#[derive(Debug,PartialEq,Eq)]
 pub struct Import {
     pub module: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug,PartialEq,Eq)]
 pub enum Declaration {
     Function(Function),
     Struct(StructDef),
@@ -21,7 +21,7 @@ pub enum Declaration {
 }
 
 //  types 
-#[derive(Debug, Clone)]
+#[derive(Debug,PartialEq,Eq)]
 pub enum Type {
     Primitive(String),
     Array(Box<Type>),
@@ -30,14 +30,14 @@ pub enum Type {
 }
 
 // ast 
-#[derive(Debug)]
+#[derive(Debug,PartialEq,Eq)]
 pub struct StructDef {
     pub name: String,
     pub fields: Vec<(String, Type)>,
 }
 
 
-#[derive(Debug)]
+#[derive(Debug,PartialEq,Eq)]
 pub struct Function {
     pub name: String,
     pub params: Vec<(String, Type)>,
@@ -45,19 +45,19 @@ pub struct Function {
     pub body: Block,
 }
 
-#[derive(Debug)]
+#[derive(Debug,PartialEq,Eq)]
 pub struct VarDecl {
     pub name: String,
     pub ty: Option<Type>,
     pub value: Expr,
 }
 
-#[derive(Debug)]
+#[derive(Debug,PartialEq,Eq)]
 pub struct Block {
     pub statements: Vec<Stmt>,
 }
 
-#[derive(Debug)]
+#[derive(Debug,PartialEq,Eq)]
 pub enum Stmt {
     Var(VarDecl),
     Return(Option<Expr>),
@@ -80,7 +80,7 @@ pub enum Stmt {
 }
 
 //expression expr
-#[derive(Debug)]
+#[derive(Debug,PartialEq,Eq)]
 pub enum Expr {
     Literal(Literal),
     Identifier(String),
@@ -92,7 +92,7 @@ pub enum Expr {
     Index(Box<Expr>, Box<Expr>),
 }
 
-#[derive(Debug)]
+#[derive(Debug,PartialEq,Eq)]
 pub enum Literal {
     Int(String),
     Float(String),
@@ -101,14 +101,15 @@ pub enum Literal {
     Char(char),
 }
 
-#[derive(Debug)]
+
+#[derive(Debug,PartialEq,Eq)]
 pub enum BinOp {
     Add, Sub, Mul, Div,
     Eq, Ne, Lt, Gt, Le, Ge,
     And, Or,
 }
 
-#[derive(Debug)]
+#[derive(Debug,PartialEq,Eq)]
 pub enum UnOp {
     Neg,
     Not,
