@@ -170,11 +170,11 @@ impl Parser {
         let mut imports = Vec::new();
         let mut declarations = Vec::new();
 
-        while matches!(self.peek()?, TokenType::Import) {
+        while self.peek()? == TokenType::Import {
             imports.push(self.parse_import()?);
         }
 
-        while !matches!(self.peek()?, TokenType::Eof) {
+        while self.peek()? != TokenType::Eof {
             declarations.push(self.parse_declaration()?);
         }
 
@@ -222,9 +222,9 @@ impl Parser {
             }
             TokenType::LParen => {
                 let mut params = Vec::new();
-                if !matches!(self.peek()?, TokenType::RParen) {
+                if self.peek()? != TokenType::RParen {
                     params.push(self.parse_type()?);
-                    while matches!(self.peek()?, TokenType::Comma) {
+                    while self.peek()? == TokenType::Comma {
                         self.next()?;
                         params.push(self.parse_type()?);
                     }
@@ -249,14 +249,14 @@ impl Parser {
         self.expect(TokenType::LBrace)?;
 
         let mut fields = Vec::new();
-        if !matches!(self.peek()?, TokenType::RBrace) {
+        if self.peek()?!= TokenType::RBrace {
             loop {
                 let fname = self.expect_ident()?;
                 self.expect(TokenType::Colon)?;
                 let ftype = self.parse_type()?;
                 fields.push((fname, ftype));
 
-                if !matches!(self.peek()?, TokenType::Comma) {
+                if self.peek()? != TokenType::Comma {
                     break;
                 }
                 self.next()?;
@@ -273,13 +273,13 @@ impl Parser {
 
         self.expect(TokenType::LParen)?;
         let mut params = Vec::new();
-        if !matches!(self.peek()?, TokenType::RParen) {
+        if self.peek()? != TokenType::RParen {
             loop {
                 let pname = self.expect_ident()?;
                 self.expect(TokenType::Colon)?;
                 let ptype = self.parse_type()?;
                 params.push((pname, ptype));
-                if !matches!(self.peek()?, TokenType::Comma) {
+                if self.peek()? != TokenType::Comma {
                     break;
                 }
                 self.next()?;
@@ -297,7 +297,7 @@ impl Parser {
     fn parse_block(&mut self) -> EtherResult<Block> {
         self.expect(TokenType::LBrace)?;
         let mut statements = Vec::new();
-        while !matches!(self.peek()?, TokenType::RBrace) {
+        while self.peek()? != TokenType::RBrace {
             statements.push(self.parse_stmt()?);
         }
         self.expect(TokenType::RBrace)?;
@@ -311,7 +311,7 @@ impl Parser {
             TokenType::Let => Ok(Stmt::Var(self.parse_var_decl()?)),
             TokenType::Return => {
                 self.next()?;
-                let expr = if matches!(self.peek()?, TokenType::Semicolon) {
+                let expr = if self.peek()? == TokenType::Semicolon {
                     None
                 } else {
                     Some(self.parse_expr()?)
@@ -335,7 +335,7 @@ impl Parser {
         self.expect(TokenType::Let)?;
         let name = self.expect_ident()?;
 
-        let ty = if matches!(self.peek()?, TokenType::Colon) {
+        let ty = if self.peek()? == TokenType::Colon {
             self.next()?;
             Some(self.parse_type()?)
         } else {
@@ -356,7 +356,7 @@ impl Parser {
         self.expect(TokenType::RParen)?;
         let then_block = self.parse_block()?;
 
-        let else_block = if matches!(self.peek()?, TokenType::Else) {
+        let else_block = if self.peek()? == TokenType::Else {
             self.next()?;
             Some(self.parse_block()?)
         } else {
@@ -394,7 +394,7 @@ impl Parser {
 
     fn parse_assignment(&mut self) -> EtherResult<Expr> {
         let left = self.parse_or()?;
-        if matches!(self.peek()?, TokenType::Assign) {
+        if self.peek()? == TokenType::Assign {
             self.next()?;
             let right = self.parse_assignment()?;
             Ok(Expr::Assign(Box::new(left), Box::new(right)))
@@ -405,7 +405,7 @@ impl Parser {
 
     fn parse_or(&mut self) -> EtherResult<Expr> {
         let mut expr = self.parse_and()?;
-        while matches!(self.peek()?, TokenType::Or) {
+        while self.peek()? == TokenType::Or {
             self.next()?;
             let rhs = self.parse_and()?;
             expr = Expr::Binary(Box::new(expr), BinOp::Or, Box::new(rhs));
@@ -415,7 +415,7 @@ impl Parser {
 
     fn parse_and(&mut self) -> EtherResult<Expr> {
         let mut expr = self.parse_equality()?;
-        while matches!(self.peek()?, TokenType::And) {
+        while self.peek()? == TokenType::And {
             self.next()?;
             let rhs = self.parse_equality()?;
             expr = Expr::Binary(Box::new(expr), BinOp::And, Box::new(rhs));
@@ -490,9 +490,9 @@ impl Parser {
                 TokenType::LParen => {
                     self.next()?;
                     let mut args = Vec::new();
-                    if !matches!(self.peek()?, TokenType::RParen) {
+                    if self.peek()?!= TokenType::RParen {
                         args.push(self.parse_expr()?);
-                        while matches!(self.peek()?, TokenType::Comma) {
+                        while self.peek()? == TokenType::Comma {
                             self.next()?;
                             args.push(self.parse_expr()?);
                         }
