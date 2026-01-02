@@ -195,9 +195,43 @@ fn test(): void {
 
 #[test]
 fn llvm_ir_gen() {
-    let context = Context::create();
-    let compiler = Compiler::new(&context);
+    let source = r#"
+        fn add(a: int, b: int): int {
+            return a + b;
+        }
+        
+        fn main(): int {
+            let x: int = 10;
+            let y: int = 20;
+            let result: int = add(x, y);
+            return result;
+        }
+    "#;
+    let mut tokenizer = Tokenizer::new(source);
+    let tokens = tokenizer.tokenize(true);
+    let mut parser = Parser::new(tokens);
+    let program = match parser.parse_program() {
+        Ok(program) => program,
+        Err(e) => {
+            eprintln!("Parser error: {:?}", e);
+            return;
+        }
+    };
+    // let result = parser.parse_program();
 
-    compiler.compile();
-    compiler.print_ir();
+    let context = Context::create();
+    let mut codegen = CodeGen::new(&context, "my_module");
+
+    match codegen.compile_program(&program) {
+        Ok(_) => {
+            println!("Compilation successful!");
+            println!("\nGenerated LLVM IR:");
+            codegen.print_ir();
+        }
+        Err(e) => {
+            eprintln!("Code generation error: {}", e);
+        }
+    }
+    // compiler.compile();
+    // compiler.print_ir();
 }
