@@ -245,6 +245,15 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
+    fn compile_global_var(&mut self, var: &VarDecl) -> Result<(), String> {
+        let value = self.compile_expr(&var.value)?;
+        let global =
+            self.module
+                .add_global(value.get_type(), Some(AddressSpace::default()), &var.name);
+        global.set_initializer(&value);
+
+        Ok(())
+    }
     // Block & Statements
     fn compile_block(&mut self, block: &Block) -> Result<(), String> {
         for stmt in &block.statements {
@@ -425,6 +434,7 @@ impl<'ctx> CodeGen<'ctx> {
         // For loop implementation would require iterator protocol
         Err("For loops not yet implemented".to_string())
     }
+
     // experssions
     fn compile_expr(&mut self, expr: &Expr) -> Result<BasicValueEnum<'ctx>, String> {
         match expr {
@@ -461,6 +471,188 @@ impl<'ctx> CodeGen<'ctx> {
                 Ok(str_val.as_pointer_value().into())
             }
         }
+    }
+
+    fn compile_identifier(&self, name: &str) -> Result<BasicValueEnum<'ctx>, String> {
+        let ptr = self
+            .variables
+            .get(name)
+            .ok_or_else(|| format!("Undefined variable: {}", name))?;
+
+        self.builder
+            .build_load(ptr.get_type().get_element_type(), *ptr, name)
+            .map_err(|e| format!("Failed to load variable: {:?}", e))
+    }
+
+    fn compile_assign(
+        &mut self,
+        target: &Expr,
+        value: &Expr,
+    ) -> Result<BasicValueEnum<'ctx>, String> {
+        let val = self.compile_expr(value)?;
+
+        match target {
+            Expr::Identifier(name) => {
+                let ptr = self
+                    .variables
+                    .get(name)
+                    .ok_or_else(|| format!("Undefined variable: {}", name))?;
+
+                self.builder
+                    .build_store(*ptr, val)
+                    .map_err(|e| format!("Failed to store value: {:?}", e))?;
+
+                Ok(val)
+            }
+            _ => Err("Invalid assignment target".to_string()),
+        }
+    }
+
+    fn compile_binary(
+        &mut self,
+        left: &Expr,
+        op: &BinOp,
+        right: &Expr,
+    ) -> Result<BasicValueEnum<'ctx>, String> {
+        let lhs = self.compile_expr(left)?;
+        let rhs = self.compile_expr(right)?;
+
+        match (lhs, rhs) {
+            (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) => {
+                let result = match op {
+                    BinOp::Add => self.builder.build_int_add(l, r, "add"),
+                    BinOp::Sub => self.builder.build_int_sub(l, r, "sub"),
+                    BinOp::Mul => self.builder.build_int_mul(l, r, "mul"),
+                    BinOp::Div => self.builder.build_int_signed_div(l, r, "div"),
+                    BinOp::Eq => self.builder.build_int_compare(IntPredicate::EQ, l, r, "eq"),
+                    BinOp::Ne => self.builder.build_int_compare(IntPredicate::NE, l, r, "ne"),
+                    BinOp::Lt => self
+                        .builder
+                        .build_int_compare(IntPredicate::SLT, l, r, "lt"),
+                    BinOp::Gt => self
+                        .builder
+                        .build_int_compare(IntPredicate::SGT, l, r, "gt"),
+                    BinOp::Le => self
+                        .builder
+                        .build_int_compare(IntPredicate::SLE, l, r, "le"),
+                    BinOp::Ge => self
+                        .builder
+                        .build_int_compare(IntPredicate::SGE, l, r, "ge"),
+                    BinOp::And => self.builder.build_and(l, r, "and"),
+                    BinOp::Or => self.builder.build_or(l, r, "or"),
+                }
+                .map_err(|e| format!("Failed to build binary op: {:?}", e))?;
+
+                Ok(result.into())
+            }
+            (BasicValueEnum::FloatValue(l), BasicValueEnum::FloatValue(r)) => {
+                let result = match op {
+                    BinOp::Add => self.builder.build_float_add(l, r, "fadd"),
+                    BinOp::Sub => self.builder.build_float_sub(l, r, "fsub"),
+                    BinOp::Mul => self.builder.build_float_mul(l, r, "fmul"),
+                    BinOp::Div => self.builder.build_float_div(l, r, "fdiv"),
+                    BinOp::Eq => self
+                        .builder
+                        .build_float_compare(FloatPredicate::OEQ, l, r, "feq"),
+                    BinOp::Ne => self
+                        .builder
+                        .build_float_compare(FloatPredicate::ONE, l, r, "fne"),
+                    BinOp::Lt => self
+                        .builder
+                        .build_float_compare(FloatPredicate::OLT, l, r, "flt"),
+                    BinOp::Gt => self
+                        .builder
+                        .build_float_compare(FloatPredicate::OGT, l, r, "fgt"),
+                    BinOp::Le => self
+                        .builder
+                        .build_float_compare(FloatPredicate::OLE, l, r, "fle"),
+                    BinOp::Ge => self
+                        .builder
+                        .build_float_compare(FloatPredicate::OGE, l, r, "fge"),
+                    _ => return Err(format!("Invalid float operation: {:?}", op)),
+                }
+                .map_err(|e| format!("Failed to build float op: {:?}", e))?;
+
+                Ok(result.into())
+            }
+            _ => Err("Type mismatch in binary operation".to_string()),
+        }
+    }
+
+    fn compile_unary(&mut self, op: &UnOp, expr: &Expr) -> Result<BasicValueEnum<'ctx>, String> {
+        let val = self.compile_expr(expr)?;
+
+        match op {
+            UnOp::Neg => {
+                if let BasicValueEnum::IntValue(i) = val {
+                    Ok(self
+                        .builder
+                        .build_int_neg(i, "neg")
+                        .map_err(|e| format!("Failed to build neg: {:?}", e))?
+                        .into())
+                } else if let BasicValueEnum::FloatValue(f) = val {
+                    Ok(self
+                        .builder
+                        .build_float_neg(f, "fneg")
+                        .map_err(|e| format!("Failed to build fneg: {:?}", e))?
+                        .into())
+                } else {
+                    Err("Invalid type for negation".to_string())
+                }
+            }
+            UnOp::Not => {
+                if let BasicValueEnum::IntValue(i) = val {
+                    Ok(self
+                        .builder
+                        .build_not(i, "not")
+                        .map_err(|e| format!("Failed to build not: {:?}", e))?
+                        .into())
+                } else {
+                    Err("Invalid type for not operation".to_string())
+                }
+            }
+        }
+    }
+
+    fn compile_call(
+        &mut self,
+        func_expr: &Expr,
+        args: &[Expr],
+    ) -> Result<BasicValueEnum<'ctx>, String> {
+        let func_name = if let Expr::Identifier(name) = func_expr {
+            name
+        } else {
+            return Err("Only direct function calls supported".to_string());
+        };
+
+        let function = self
+            .functions
+            .get(func_name)
+            .ok_or_else(|| format!("Undefined function: {}", func_name))?;
+
+        let mut compiled_args = Vec::new();
+        for arg in args {
+            let val = self.compile_expr(arg)?;
+            compiled_args.push(val.into());
+        }
+
+        let call_site = self
+            .builder
+            .build_call(*function, &compiled_args, "call")
+            .map_err(|e| format!("Failed to build call: {:?}", e))?;
+
+        call_site
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| "Function returned void".to_string())
+    }
+
+    fn compile_field(&mut self, _obj: &Expr, _field: &str) -> Result<BasicValueEnum<'ctx>, String> {
+        Err("Struct field access not yet implemented".to_string())
+    }
+
+    fn compile_index(&mut self, _arr: &Expr, _idx: &Expr) -> Result<BasicValueEnum<'ctx>, String> {
+        Err("Array indexing not yet implemented".to_string())
     }
     // pub fn compile_expr(&self, expr: &Expr) -> IntValue<'ctx> {
     //     match expr {
@@ -508,6 +700,10 @@ impl<'ctx> CodeGen<'ctx> {
     //
     pub fn print_ir(&self) {
         self.module.print_to_stderr();
+    }
+
+    pub fn get_module(&self) -> &Module<'ctx> {
+        &self.module
     }
 }
 
