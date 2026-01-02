@@ -86,6 +86,7 @@ fn ast_gen_test() {
 
     let mut parser = Parser::new(tokens);
     let ast = parser.parse_program();
+    println!("{:?}", ast);
     assert_matches!(ast, Ok(_));
 }
 
