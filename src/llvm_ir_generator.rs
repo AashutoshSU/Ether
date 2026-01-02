@@ -318,6 +318,113 @@ impl<'ctx> CodeGen<'ctx> {
         Ok(())
     }
 
+    // loops and control statements
+    fn compile_if(
+        &mut self,
+        cond: &Expr,
+        then_block: &Block,
+        else_block: Option<&Block>,
+    ) -> Result<(), String> {
+        let cond_val = self.compile_expr(cond)?;
+        let cond_val = cond_val.into_int_value();
+
+        let parent_fn = self
+            .builder
+            .get_insert_block()
+            .unwrap()
+            .get_parent()
+            .unwrap();
+
+        let then_bb = self.context.append_basic_block(parent_fn, "then");
+        let else_bb = self.context.append_basic_block(parent_fn, "else");
+        let merge_bb = self.context.append_basic_block(parent_fn, "ifcont");
+
+        self.builder
+            .build_conditional_branch(cond_val, then_bb, else_bb)
+            .map_err(|e| format!("Failed to build conditional branch: {:?}", e))?;
+
+        // Then block
+        self.builder.position_at_end(then_bb);
+        self.compile_block(then_block)?;
+        if self
+            .builder
+            .get_insert_block()
+            .unwrap()
+            .get_terminator()
+            .is_none()
+        {
+            self.builder
+                .build_unconditional_branch(merge_bb)
+                .map_err(|e| format!("Failed to build branch: {:?}", e))?;
+        }
+
+        // Else block
+        self.builder.position_at_end(else_bb);
+        if let Some(eb) = else_block {
+            self.compile_block(eb)?;
+        }
+        if self
+            .builder
+            .get_insert_block()
+            .unwrap()
+            .get_terminator()
+            .is_none()
+        {
+            self.builder
+                .build_unconditional_branch(merge_bb)
+                .map_err(|e| format!("Failed to build branch: {:?}", e))?;
+        }
+
+        self.builder.position_at_end(merge_bb);
+        Ok(())
+    }
+
+    fn compile_while(&mut self, cond: &Expr, body: &Block) -> Result<(), String> {
+        let parent_fn = self
+            .builder
+            .get_insert_block()
+            .unwrap()
+            .get_parent()
+            .unwrap();
+
+        let cond_bb = self.context.append_basic_block(parent_fn, "while.cond");
+        let body_bb = self.context.append_basic_block(parent_fn, "while.body");
+        let end_bb = self.context.append_basic_block(parent_fn, "while.end");
+
+        self.builder
+            .build_unconditional_branch(cond_bb)
+            .map_err(|e| format!("Failed to build branch: {:?}", e))?;
+
+        // Condition
+        self.builder.position_at_end(cond_bb);
+        let cond_val = self.compile_expr(cond)?.into_int_value();
+        self.builder
+            .build_conditional_branch(cond_val, body_bb, end_bb)
+            .map_err(|e| format!("Failed to build conditional branch: {:?}", e))?;
+
+        // Body
+        self.builder.position_at_end(body_bb);
+        self.compile_block(body)?;
+        if self
+            .builder
+            .get_insert_block()
+            .unwrap()
+            .get_terminator()
+            .is_none()
+        {
+            self.builder
+                .build_unconditional_branch(cond_bb)
+                .map_err(|e| format!("Failed to build branch: {:?}", e))?;
+        }
+
+        self.builder.position_at_end(end_bb);
+        Ok(())
+    }
+
+    fn compile_for(&mut self, _name: &str, _iter: &Expr, _body: &Block) -> Result<(), String> {
+        // For loop implementation would require iterator protocol
+        Err("For loops not yet implemented".to_string())
+    }
     // experssions
     fn compile_expr(&mut self, expr: &Expr) -> Result<BasicValueEnum<'ctx>, String> {
         match expr {
