@@ -13,13 +13,6 @@ use crate::parser::{
     StructDef, Type, UnOp, VarDecl,
 };
 
-// Example AST nodes
-// enum Expr {
-//     Number(i64),
-//     Add(Box<Expr>, Box<Expr>),
-//     Multiply(Box<Expr>, Box<Expr>),
-// }
-//
 pub struct CodeGen<'ctx> {
     context: &'ctx Context,
     builder: Builder<'ctx>,
@@ -27,6 +20,7 @@ pub struct CodeGen<'ctx> {
 
     // Symbol tables
     variables: HashMap<String, PointerValue<'ctx>>,
+    variable_types: HashMap<String, BasicTypeEnum<'ctx>>,
     functions: HashMap<String, FunctionValue<'ctx>>,
     structs: HashMap<String, BasicTypeEnum<'ctx>>,
 }
@@ -41,12 +35,14 @@ impl<'ctx> CodeGen<'ctx> {
             builder,
             module,
             variables: HashMap::new(),
+            variable_types: HashMap::new(),
             functions: HashMap::new(),
             structs: HashMap::new(),
         }
     }
 
-    // Main Entry Point
+    // ================= Main Entry Point =================
+
     pub fn compile_program(&mut self, program: &Program) -> Result<(), String> {
         // First pass: declare all structs
         for decl in &program.declarations {
@@ -74,7 +70,8 @@ impl<'ctx> CodeGen<'ctx> {
         Ok(())
     }
 
-    // Type Conversion
+    // ================= Type Conversion =================
+
     fn convert_type(&self, ty: &Type) -> Result<BasicTypeEnum<'ctx>, String> {
         match ty {
             Type::Primitive(name) => match name.as_str() {
@@ -114,7 +111,8 @@ impl<'ctx> CodeGen<'ctx> {
         matches!(ty, Type::Primitive(name) if name == "void")
     }
 
-    // Struct Handling
+    // ================= Struct Handling =================
+
     fn declare_struct(&mut self, struct_def: &StructDef) -> Result<(), String> {
         let mut field_types = Vec::new();
 
@@ -130,7 +128,8 @@ impl<'ctx> CodeGen<'ctx> {
         Ok(())
     }
 
-    // Function Handling
+    // ================= Function Handling =================
+
     fn declare_function(&mut self, function: &Function) -> Result<FunctionValue<'ctx>, String> {
         let name = function
             .header
@@ -181,7 +180,9 @@ impl<'ctx> CodeGen<'ctx> {
 
         // Create a new scope for function variables
         let prev_vars = self.variables.clone();
+        let prev_types = self.variable_types.clone();
         self.variables.clear();
+        self.variable_types.clear();
 
         // Allocate parameters
         for (i, (param_name, param_ty)) in function.header.params.iter().enumerate() {
@@ -201,6 +202,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .map_err(|e| format!("Failed to store parameter: {:?}", e))?;
 
                 self.variables.insert(name.clone(), alloca);
+                self.variable_types.insert(name.clone(), param_type);
             }
         }
 
@@ -231,6 +233,7 @@ impl<'ctx> CodeGen<'ctx> {
 
         // Restore previous scope
         self.variables = prev_vars;
+        self.variable_types = prev_types;
 
         Ok(())
     }
@@ -245,6 +248,8 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
+    // ================= Global Variables =================
+
     fn compile_global_var(&mut self, var: &VarDecl) -> Result<(), String> {
         let value = self.compile_expr(&var.value)?;
         let global =
@@ -254,7 +259,9 @@ impl<'ctx> CodeGen<'ctx> {
 
         Ok(())
     }
-    // Block & Statements
+
+    // ================= Block & Statements =================
+
     fn compile_block(&mut self, block: &Block) -> Result<(), String> {
         for stmt in &block.statements {
             self.compile_stmt(stmt)?;
@@ -291,6 +298,7 @@ impl<'ctx> CodeGen<'ctx> {
             Stmt::For { name, iter, body } => self.compile_for(name, iter, body),
         }
     }
+
     fn compile_var_decl(&mut self, var: &VarDecl) -> Result<(), String> {
         let value = self.compile_expr(&var.value)?;
 
@@ -310,6 +318,7 @@ impl<'ctx> CodeGen<'ctx> {
             .map_err(|e| format!("Failed to store variable: {:?}", e))?;
 
         self.variables.insert(var.name.clone(), alloca);
+        self.variable_types.insert(var.name.clone(), ty);
         Ok(())
     }
 
@@ -327,7 +336,6 @@ impl<'ctx> CodeGen<'ctx> {
         Ok(())
     }
 
-    // loops and control statements
     fn compile_if(
         &mut self,
         cond: &Expr,
@@ -435,7 +443,8 @@ impl<'ctx> CodeGen<'ctx> {
         Err("For loops not yet implemented".to_string())
     }
 
-    // experssions
+    // ================= Expressions =================
+
     fn compile_expr(&mut self, expr: &Expr) -> Result<BasicValueEnum<'ctx>, String> {
         match expr {
             Expr::Literal(lit) => self.compile_literal(lit),
@@ -450,7 +459,6 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    // literals
     fn compile_literal(&self, lit: &Literal) -> Result<BasicValueEnum<'ctx>, String> {
         match lit {
             Literal::Int(s) => {
@@ -473,14 +481,21 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    fn compile_identifier(&self, name: &str) -> Result<BasicValueEnum<'ctx>, String> {
+    fn compile_identifier(&mut self, name: &str) -> Result<BasicValueEnum<'ctx>, String> {
         let ptr = self
             .variables
             .get(name)
             .ok_or_else(|| format!("Undefined variable: {}", name))?;
 
+        // Get the type that was stored with this variable
+        let load_type = if let Some(alloca_type) = self.variable_types.get(name) {
+            *alloca_type
+        } else {
+            return Err(format!("Unknown type for variable: {}", name));
+        };
+
         self.builder
-            .build_load(ptr.get_type().get_element_type(), *ptr, name)
+            .build_load(load_type, *ptr, name)
             .map_err(|e| format!("Failed to load variable: {:?}", e))
     }
 
@@ -654,50 +669,9 @@ impl<'ctx> CodeGen<'ctx> {
     fn compile_index(&mut self, _arr: &Expr, _idx: &Expr) -> Result<BasicValueEnum<'ctx>, String> {
         Err("Array indexing not yet implemented".to_string())
     }
-    // pub fn compile_expr(&self, expr: &Expr) -> IntValue<'ctx> {
-    //     match expr {
-    //         Expr::Number(n) => self.context.i64_type().const_int(*n as u64, false),
-    //         Expr::Add(left, right) => {
-    //             let lhs = self.compile_expr(left);
-    //             let rhs = self.compile_expr(right);
-    //             self.builder
-    //                 .build_int_add(lhs, rhs, "addtmp")
-    //                 .expect("Failed to build add")
-    //         }
-    //         Expr::Multiply(left, right) => {
-    //             let lhs = self.compile_expr(left);
-    //             let rhs = self.compile_expr(right);
-    //             self.builder
-    //                 .build_int_mul(lhs, rhs, "multmp")
-    //                 .expect("Failed to build mul")
-    //         }
-    //     }
-    // }
 
-    // pub fn compile(&self) {
-    //     // Create a function: i64 main()
-    //     let i64_type = self.context.i64_type();
-    //     let fn_type = i64_type.fn_type(&[], false);
-    //     let function = self.module.add_function("main", fn_type, None);
-    //     let basic_block = self.context.append_basic_block(function, "entry");
-    //
-    //     self.builder.position_at_end(basic_block);
-    //
-    //     // Example: compile (2 + 3) * 4
-    //     let ast = Expr::Multiply(
-    //         Box::new(Expr::Add(
-    //             Box::new(Expr::Number(2)),
-    //             Box::new(Expr::Number(3)),
-    //         )),
-    //         Box::new(Expr::Number(4)),
-    //     );
-    //
-    //     let result = self.compile_expr(&ast);
-    //     self.builder
-    //         .build_return(Some(&result))
-    //         .expect("Failed to build return");
-    // }
-    //
+    // ================= Output =================
+
     pub fn print_ir(&self) {
         self.module.print_to_stderr();
     }
@@ -706,11 +680,3 @@ impl<'ctx> CodeGen<'ctx> {
         &self.module
     }
 }
-
-// fn main() {
-//     let context = Context::create();
-//     let compiler = Compiler::new(&context);
-//
-//     compiler.compile();
-//     compiler.print_ir();
-// }
