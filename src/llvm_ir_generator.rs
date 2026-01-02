@@ -113,6 +113,137 @@ impl<'ctx> CodeGen<'ctx> {
     fn is_void_type(&self, ty: &Type) -> bool {
         matches!(ty, Type::Primitive(name) if name == "void")
     }
+
+    // Struct Handling
+    fn declare_struct(&mut self, struct_def: &StructDef) -> Result<(), String> {
+        let mut field_types = Vec::new();
+
+        for (_, field_ty) in &struct_def.fields {
+            let ty = self.convert_type(field_ty)?;
+            field_types.push(ty);
+        }
+
+        let struct_type = self.context.struct_type(&field_types, false);
+        self.structs
+            .insert(struct_def.name.clone(), struct_type.into());
+
+        Ok(())
+    }
+
+    // Function Handling
+    fn declare_function(&mut self, function: &Function) -> Result<FunctionValue<'ctx>, String> {
+        let name = function
+            .header
+            .name
+            .as_ref()
+            .ok_or("Function must have a name at top level")?;
+
+        if self.functions.contains_key(name) {
+            return Ok(self.functions[name]);
+        }
+
+        let fn_type = self.get_function_type(&function.header)?;
+        let fn_val = self.module.add_function(name, fn_type, None);
+
+        self.functions.insert(name.clone(), fn_val);
+        Ok(fn_val)
+    }
+
+    fn get_function_type(
+        &self,
+        header: &FunctionHeader,
+    ) -> Result<inkwell::types::FunctionType<'ctx>, String> {
+        let mut param_types = Vec::new();
+
+        for (_, param_ty) in &header.params {
+            let ty = self.convert_type(param_ty)?;
+            param_types.push(ty.into());
+        }
+
+        if self.is_void_type(&header.return_type) {
+            Ok(self.context.void_type().fn_type(&param_types, false))
+        } else {
+            let ret_ty = self.convert_type(&header.return_type)?;
+            Ok(ret_ty.fn_type(&param_types, false))
+        }
+    }
+
+    fn compile_function(&mut self, function: &Function) -> Result<(), String> {
+        let name = function
+            .header
+            .name
+            .as_ref()
+            .ok_or("Function must have a name")?;
+
+        let fn_val = self.functions[name];
+        let entry_bb = self.context.append_basic_block(fn_val, "entry");
+        self.builder.position_at_end(entry_bb);
+
+        // Create a new scope for function variables
+        let prev_vars = self.variables.clone();
+        self.variables.clear();
+
+        // Allocate parameters
+        for (i, (param_name, param_ty)) in function.header.params.iter().enumerate() {
+            if let Some(name) = param_name {
+                let param_val = fn_val
+                    .get_nth_param(i as u32)
+                    .ok_or_else(|| format!("Missing parameter {}", i))?;
+
+                let param_type = self.convert_type(param_ty)?;
+                let alloca = self
+                    .builder
+                    .build_alloca(param_type, name)
+                    .map_err(|e| format!("Failed to allocate parameter: {:?}", e))?;
+
+                self.builder
+                    .build_store(alloca, param_val)
+                    .map_err(|e| format!("Failed to store parameter: {:?}", e))?;
+
+                self.variables.insert(name.clone(), alloca);
+            }
+        }
+
+        // Compile function body
+        self.compile_block(&function.body)?;
+
+        // Add return if missing
+        if self
+            .builder
+            .get_insert_block()
+            .unwrap()
+            .get_terminator()
+            .is_none()
+        {
+            if self.is_void_type(&function.header.return_type) {
+                self.builder
+                    .build_return(None)
+                    .map_err(|e| format!("Failed to build return: {:?}", e))?;
+            } else {
+                // Return default value
+                let ret_ty = self.convert_type(&function.header.return_type)?;
+                let zero = self.get_default_value(ret_ty);
+                self.builder
+                    .build_return(Some(&zero))
+                    .map_err(|e| format!("Failed to build return: {:?}", e))?;
+            }
+        }
+
+        // Restore previous scope
+        self.variables = prev_vars;
+
+        Ok(())
+    }
+
+    fn get_default_value(&self, ty: BasicTypeEnum<'ctx>) -> BasicValueEnum<'ctx> {
+        match ty {
+            BasicTypeEnum::IntType(int_ty) => int_ty.const_zero().into(),
+            BasicTypeEnum::FloatType(float_ty) => float_ty.const_zero().into(),
+            BasicTypeEnum::PointerType(ptr_ty) => ptr_ty.const_null().into(),
+            BasicTypeEnum::StructType(struct_ty) => struct_ty.const_zero().into(),
+            _ => panic!("Unsupported type for default value"),
+        }
+    }
     // pub fn compile_expr(&self, expr: &Expr) -> IntValue<'ctx> {
     //     match expr {
     //         Expr::Number(n) => self.context.i64_type().const_int(*n as u64, false),
