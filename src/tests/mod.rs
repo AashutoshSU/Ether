@@ -1,5 +1,8 @@
+use inkwell::context::Context;
+
+use crate::llvm_ir_generator;
 #[cfg(test)]
-use crate::{error::*, lexer::*, parser::*};
+use crate::{error::*, lexer::*, llvm_ir_generator::*, parser::*};
 use std::assert_matches::assert_matches;
 
 #[test]
@@ -83,6 +86,7 @@ fn ast_gen_test() {
 
     let mut parser = Parser::new(tokens);
     let ast = parser.parse_program();
+    println!("{:?}", ast);
     assert_matches!(ast, Ok(_));
 }
 
@@ -251,5 +255,71 @@ fn test(): void {
             "Test 3 - Error at line {}, column {}: {}",
             err.line, err.column, err
         );
+    }
+}
+
+#[test]
+fn llvm_ir_gen() {
+    let test_codes: [&str; 3] = [
+        r#"
+        fn add(a: int, b: int): int {
+            return a + b;
+        }
+
+        fn main(): int {
+            let x: int = 10;
+            let y: int = 20;
+            let result: int = add(x, y);
+            return result;
+        }
+    "#,
+        r#"
+        fn fibonacci(n: int): int {
+            if (n <= 1) {
+                return n;
+            } else {
+                return fibonacci(n - 1) + fibonacci(n - 2);
+            }
+        }
+
+        fn main(): int {
+            let result: int = fibonacci(10);
+            return result;
+        }
+    "#,
+        r#"
+        fn sum_to_n(n: int): int {
+            let sum: int = 0;
+            let i: int = 0;
+            
+            while (i <= n) {
+                sum = sum + i;
+                i = i + 1;
+            }
+            
+            return sum;
+        }
+        
+        fn main(): int {
+            return sum_to_n(100);
+        }
+    "#,
+    ];
+    let selected_test_index = 0;
+    let mut tokenizer = Tokenizer::new(test_codes[selected_test_index]);
+    let tokens = tokenizer.tokenize(true);
+    let mut parser = Parser::new(tokens);
+    let parsed_tokens = parser.parse_program().unwrap();
+
+    let context = Context::create();
+    let mut codegen = CodeGen::new(&context, "my_module");
+
+    match codegen.compile_program(&parsed_tokens) {
+        Ok(_) => {
+            codegen.print_ir();
+        }
+        Err(e) => {
+            eprintln!("Code generation error: {}", e);
+        }
     }
 }
