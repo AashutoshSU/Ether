@@ -24,6 +24,7 @@ pub struct CodeGen<'ctx> {
     variable_types: HashMap<String, BasicTypeEnum<'ctx>>,
     functions: HashMap<String, FunctionValue<'ctx>>,
     structs: HashMap<String, BasicTypeEnum<'ctx>>,
+    // enums: HashMap<String, BasicTypeEnum<'ctx>>,
 }
 
 impl<'ctx> CodeGen<'ctx> {
@@ -50,6 +51,9 @@ impl<'ctx> CodeGen<'ctx> {
             if let Declaration::Struct(s) = decl {
                 self.declare_struct(s)?;
             }
+            // if let Declaration::Enum(e) = decl {
+            //     self.declare_enum(e)?;
+            // }
         }
 
         // Second pass: declare all functions
@@ -128,6 +132,13 @@ impl<'ctx> CodeGen<'ctx> {
 
         Ok(())
     }
+    // ================= Enum Handling =================
+    // fn declare_enum(&mut self, enum_def: &EnumDef) -> Result<(), String> {
+
+    //     self.enums.insert(enum_def.name.clone());
+
+    //     Ok(())
+    // }
 
     // ================= Function Handling =================
 
