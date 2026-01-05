@@ -173,11 +173,11 @@ impl Parser {
                 } else {
                     (1, 1)
                 };
-                EtherError::Parser(ParserError::new(
-                    "Unexpected end of input".into(),
+                ParserError{
+                    err_string: "Unexpected end of input".into(),
                     line,
                     column,
-                ))
+                }.into()
             })
     }
 
@@ -193,11 +193,11 @@ impl Parser {
             Ok(())
         } else {
             let (line, column) = self.get_position();
-            Err(EtherError::Parser(ParserError::new(
-                format!("Expected {:?}, got {:?}", expected, tok),
+        Err(ParserError{
+                err_string: format!("Expected {:?}, got {:?}", expected, tok),
                 line,
                 column,
-            )))
+            }.into())
         }
     }
 
@@ -206,11 +206,11 @@ impl Parser {
             TokenType::Identifier(s) => Ok(s.clone()),
             t => {
                 let (line, column) = self.get_position();
-                Err(EtherError::Parser(ParserError::new(
-                    format!("Expected identifier, got {:?}", t),
+                Err(ParserError{
+                    err_string: format!("Expected identifier, got {:?}", t),
                     line,
                     column,
-                )))
+                }.into())
             }
         }
     }
@@ -241,11 +241,11 @@ impl Parser {
             TokenType::StringLit(s) => Ok(Import { module: s.clone() }),
             t => {
                 let (line, column) = self.get_position();
-                Err(EtherError::Parser(ParserError::new(
-                    format!("Expected string literal, got {:?}", t),
+                Err(ParserError{
+                    err_string: format!("Expected string literal, got {:?}", t),
                     line,
                     column,
-                )))
+                }.into())
             }
         }
     }
@@ -253,29 +253,29 @@ impl Parser {
     fn parse_declaration(&mut self) -> EtherResult<Declaration> {
         match self.peek()? {
             TokenType::Fn => {
-                self.next();
+                self.next()?;
                 let name = self.expect_ident().ok();
                 Ok(Declaration::Function(self.parse_function(name)?))
             }
             TokenType::Struct => {
-                self.next();
+                self.next()?;
                 Ok(Declaration::Struct(self.parse_struct()?))
             }
             TokenType::Enum => {
-                self.next();
+                self.next()?;
                 Ok(Declaration::Enum(self.parse_enum()?))
             }
             TokenType::Let => {
-                self.next();
+                self.next()?;
                 Ok(Declaration::Var(self.parse_var_decl()?))
             }
             t => {
                 let (line, column) = self.get_position();
-                Err(EtherError::Parser(ParserError::new(
-                    format!("Invalid declaration start: {:?}", t),
+                Err(ParserError{
+                    err_string: format!("Invalid declaration start: {:?}", t),
                     line,
                     column,
-                )))
+                }.into())
             }
         }
     }
@@ -319,11 +319,11 @@ impl Parser {
             }
             t => {
                 let (line, column) = self.get_position();
-                Err(EtherError::Parser(ParserError::new(
-                    format!("Invalid type: {:?}", t),
+                Err(ParserError {
+                    err_string: format!("Invalid type: {:?}", t),
                     line,
                     column,
-                )))
+                }.into())
             }
         }
     }
@@ -363,7 +363,7 @@ impl Parser {
             loop {
                 let fname = self.expect_ident()?;
                 if self.peek()? == TokenType::Colon{
-                    self.next();
+                    self.next()?;
                     let ftype = self.parse_type().ok();
                     fields.push((fname, ftype));
                 } else{
@@ -413,7 +413,7 @@ impl Parser {
         })
     }
 
-    fn parse_block(&mut self) -> EtherResult<Block> {
+    pub fn parse_block(&mut self) -> EtherResult<Block> {
         // {  statements }
         self.expect(TokenType::LBrace)?;
         let mut statements = Vec::new();
@@ -426,7 +426,7 @@ impl Parser {
 
     // ---------- statements ----------
 
-    fn parse_stmt(&mut self) -> EtherResult<Stmt> {
+    pub fn parse_stmt(&mut self) -> EtherResult<Stmt> {
         // { let|return|if|while|block|  }
         match self.peek()? {
             TokenType::Let => {
@@ -515,7 +515,7 @@ impl Parser {
 
     // ---------- expressions ----------
 
-    fn parse_expr(&mut self) -> EtherResult<Expr> {
+    pub fn parse_expr(&mut self) -> EtherResult<Expr> {
         if self.peek()? == TokenType::LParen {
             Ok(Expr::Function(self.parse_function(None)?))
         } else {
@@ -664,11 +664,11 @@ impl Parser {
             }
             t => {
                 let (line, column) = self.get_position();
-                Err(EtherError::Parser(ParserError::new(
-                    format!("Invalid expression start: {:?}", t),
+                Err(EtherError::Parser(ParserError {
+                    err_string: format!("Invalid expression start: {:?}", t),
                     line,
                     column,
-                )))
+                }).into())
             }
         }
     }
