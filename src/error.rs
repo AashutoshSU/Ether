@@ -1,56 +1,42 @@
-use std::fmt;
 use std::result;
 use thiserror::Error;
 
 pub type EtherResult<T> = result::Result<T, EtherError>;
 
 #[derive(Debug, Clone, Error)]
-#[error("{err_string} at {}:{}", line, column)]
+#[error("{err_string} at {line}:{column}")]
 pub struct ParserError {
-    err_string: String,
+    pub err_string: String,
     pub line: usize,
     pub column: usize,
-}
-
-impl ParserError {
-    pub fn new(err_string: String, line: usize, column: usize) -> Self {
-        Self {
-            err_string,
-            line,
-            column,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Error)]
-#[error("{err_string} at {}:{}", line, column)]
+#[error("{err_string} at {line}:{column}")]
 pub struct TokenizerError {
-    err_string: String,
+    pub err_string: String,
     pub line: usize,
     pub column: usize,
 }
 
-impl TokenizerError {
-    pub fn new(err_string: String, line: usize, column: usize) -> Self {
-        Self {
-            err_string,
-            line,
-            column,
-        }
-    }
+#[derive(Debug, Clone, Error)]
+#[error("{err_string} at {line}:{column}")]
+pub struct TypeErrorDetail {
+    pub err_string: String,
+    pub line: usize,
+    pub column: usize,
 }
 
+// removed: manually display error of 'fmt::Display impl' for EtherError
+// since 'thiserror' crate automatically implements it based on the #[error(...)] attribute
 #[derive(Debug, Error)]
 pub enum EtherError {
-    Parser(ParserError),
-    Tokenizer(TokenizerError),
-}
+    #[error("Error in parsing: {0}")]
+    Parser(#[from] ParserError),
 
-impl fmt::Display for EtherError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            EtherError::Tokenizer(e) => write!(f, "Error in tokenizing: {}", e),
-            EtherError::Parser(e) => write!(f, "Error in parsing: {}", e),
-        }
-    }
+    #[error("Error in tokenizing: {0}")]
+    Tokenizer(#[from] TokenizerError),
+
+    #[error("Type error: {0}")]
+    TypeInfer(#[from] TypeErrorDetail),
 }
