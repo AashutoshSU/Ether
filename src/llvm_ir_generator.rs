@@ -69,6 +69,7 @@ impl<'ctx> CodeGen<'ctx> {
                 Declaration::Function(f) => self.compile_function(f)?,
                 Declaration::Var(v) => self.compile_global_var(v)?,
                 Declaration::Struct(_) => {} // Already handled
+                Declaration::Enum(_)=>todo!(),
             }
         }
 
@@ -118,20 +119,18 @@ impl<'ctx> CodeGen<'ctx> {
 
     // ================= Struct Handling =================
 
-    fn declare_struct(&mut self, struct_def: &StructDef) -> Result<(), String> {
-        let mut field_types = Vec::new();
-
-        for (_, field_ty) in &struct_def.fields {
-            let ty = self.convert_type(field_ty)?;
-            field_types.push(ty);
-        }
-
-        let struct_type = self.context.struct_type(&field_types, false);
-        self.structs
-            .insert(struct_def.name.clone(), struct_type.into());
-
-        Ok(())
-    }
+fn declare_struct(&mut self, struct_def: &StructDef) -> Result<(), String> {
+    let field_types: Result<Vec<_>, String> = struct_def.fields
+        .iter()
+        .map(|(_, ty)| self.convert_type(ty))
+        .collect();
+    
+    let field_types = field_types?;
+    let struct_type = self.context.struct_type(&field_types, false);
+    self.structs.insert(struct_def.name.clone(), struct_type.into());
+    
+    Ok(())
+}
     // ================= Enum Handling =================
     // fn declare_enum(&mut self, enum_def: &EnumDef) -> Result<(), String> {
 

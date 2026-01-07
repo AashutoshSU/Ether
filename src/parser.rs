@@ -24,7 +24,7 @@ pub enum Declaration {
     Var(VarDecl),
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Type {
     Primitive(String),
     Array(Box<Type>),
@@ -44,7 +44,7 @@ pub struct EnumDef {
     pub fields: Vec<(String, Option<Type>)>, // Optional types for fields 
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq,Clone)]
 pub struct FunctionHeader {
     pub name: Option<String>,
     pub params: Vec<(Option<String>, Type)>,
