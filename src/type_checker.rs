@@ -59,13 +59,13 @@ pub fn apply_subst(ty: &InferredType, subst: &Substitution) -> InferredType {
 }
 // Compose two substitutions into one.
 pub fn compose_subst(s1: &Substitution, s2: &Substitution) -> Substitution {
-    // 1. Apply s2 to all types in s1
+    // Apply s2 to all types already in s1
     let mut result: Substitution = s1
         .iter()
         .map(|(var, ty)| (*var, apply_subst(ty, s2)))
         .collect();
 
-    // 2. Add all mappings from s2 that aren't already handled
+    // Add all new mappings from s2
     for (var, ty) in s2 {
         result.insert(*var, ty.clone());
     }
@@ -202,36 +202,36 @@ impl TypeChecker {
             }
 
             Expr::Binary(left, op, right) => {
+                // 1. Infer left operand
                 let (left_ty, s1) = self.infer_expr(left, subst)?;
+                
+                // 2. Infer right operand using substitution from left (s1)
                 let (right_ty, s2) = self.infer_expr(right, &s1)?;
 
-                let left_ty = apply_subst(&left_ty, &s2);
-                let right_ty = apply_subst(&right_ty, &s2);
+                // 3. Apply s2 to left_ty to get the most up-to-date type for the left side
+                let left_ty_current = apply_subst(&left_ty, &s2);
 
                 match op {
                     BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div => {
-                        // Arithmetic: both operands must be same numeric type
-                        let s3 = unify(&left_ty, &right_ty)?;
-                        let unified = apply_subst(&left_ty, &s3);
+                        // Unify left and right types
+                        let s3 = unify(&left_ty_current, &right_ty)?;
+                        let unified_res = apply_subst(&left_ty_current, &s3);
 
-                        // Result type same as operands
-                        Ok((unified, compose_subst(&s2, &s3)))
+                        // CRITICAL: Compose s2 (which contains s1) with s3
+                        Ok((unified_res, compose_subst(&s2, &s3)))
                     }
 
                     BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Gt | BinOp::Le | BinOp::Ge => {
-                        // Comparison: operands must match, result is bool
-                        let s3 = unify(&left_ty, &right_ty)?;
+                        let s3 = unify(&left_ty_current, &right_ty)?;
                         Ok((InferredType::Bool, compose_subst(&s2, &s3)))
                     }
 
                     BinOp::And | BinOp::Or => {
-                        // Logical: both must be bool
-                        let s3 = unify(&left_ty, &InferredType::Bool)?;
-                        let s4 = unify(&right_ty, &InferredType::Bool)?;
-                        Ok((
-                            InferredType::Bool,
-                            compose_subst(&compose_subst(&s2, &s3), &s4),
-                        ))
+                        let s3 = unify(&left_ty_current, &InferredType::Bool)?;
+                        let s4 = unify(&apply_subst(&right_ty, &s3), &InferredType::Bool)?;
+                        
+                        let final_subst = compose_subst(&compose_subst(&s2, &s3), &s4);
+                        Ok((InferredType::Bool, final_subst))
                     }
                 }
             }

@@ -493,14 +493,25 @@ mod type_tests {
 
     #[test]
     fn test_arithmetic_inference_integration() {
-        // FIX: Removed 'fn main() { ... }' wrapper.
-        // run_checker uses parse_block, which expects statements, not fn declarations.
-        let source = r#"{
-            let a  = 5;
-            let b = 10;
-            let c = (a + b) * 2;
-        }"#;
-        let checker = run_checker(source, &InferredType::Void).unwrap();
+        let mut checker = TypeChecker::new();
+        let subst = Substitution::new();
+
+        // Check statements individually to persist definitions in the current scope
+        let stmts = [
+            "let a = 5;",
+            "let b = 10;",
+            "let c = (a + b) * 2;",
+        ];
+
+        for src in stmts {
+            let mut tokenizer = Tokenizer::new(src);
+            let tokens = tokenizer.tokenize(true);
+            let mut parser = Parser::new(tokens);
+            let stmt = parser.parse_stmt().expect("Failed to parse statement");
+            checker.check_stmt(&stmt, &subst, &InferredType::Void).expect("Type check failed");
+        }
+
+        // Verify lookup succeeds because the scope was never exited
         assert_eq!(checker.env.lookup("c"), Some(&InferredType::Int));
     }
 
