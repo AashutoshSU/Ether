@@ -1,6 +1,5 @@
 use inkwell::context::Context;
 
-use crate::llvm_ir_generator;
 #[cfg(test)]
 use crate::{error::*, lexer::*, llvm_ir_generator::*, parser::*,
     type_checker::*, semantic_analyzer::*};
@@ -260,10 +259,17 @@ fn test(): void {
     }
 }
 
+#[cfg(test)]
+mod llvm_tests{
+
+use inkwell::context::Context;
+use crate::{error::*, lexer::*, llvm_ir_generator::*, parser::*,
+    type_checker::*, semantic_analyzer::*};
+use std::assert_matches::assert_matches;
+
 #[test]
 fn llvm_ir_gen() {
-    let test_codes: [&str; 3] = [
-        r#"
+    let test_code: &'static str =  r#"
         fn add(a: int, b: int): int {
             return a + b;
         }
@@ -274,41 +280,9 @@ fn llvm_ir_gen() {
             let result: int = add(x, y);
             return result;
         }
-    "#,
-        r#"
-        fn fibonacci(n: int): int {
-            if (n <= 1) {
-                return n;
-            } else {
-                return fibonacci(n - 1) + fibonacci(n - 2);
-            }
-        }
-
-        fn main(): int {
-            let result: int = fibonacci(10);
-            return result;
-        }
-    "#,
-        r#"
-        fn sum_to_n(n: int): int {
-            let sum: int = 0;
-            let i: int = 0;
-            
-            while (i <= n) {
-                sum = sum + i;
-                i = i + 1;
-            }
-            
-            return sum;
-        }
-        
-        fn main(): int {
-            return sum_to_n(100);
-        }
-    "#,
-    ];
+    "#;
     let selected_test_index = 0;
-    let mut tokenizer = Tokenizer::new(test_codes[selected_test_index]);
+    let mut tokenizer = Tokenizer::new(test_code);
     let tokens = tokenizer.tokenize(true);
     let mut parser = Parser::new(tokens);
     let parsed_tokens = parser.parse_program().unwrap();
@@ -318,12 +292,37 @@ fn llvm_ir_gen() {
 
     match codegen.compile_program(&parsed_tokens) {
         Ok(_) => {
-            codegen.print_ir();
+            println!("{}",test_code);
+            println!("{}",codegen.get_ir());
         }
         Err(e) => {
-            eprintln!("Code generation error: {}", e);
+            println!("Code generation error: {}", e);
+            }
         }
     }
+    #[test]
+    fn enum_declaration(){
+        let test_code = r#"
+            enum enum_name{ a:int, b:bool, c }
+            "#;
+        let mut tokenizer = Tokenizer::new(test_code);
+        let tokens = tokenizer.tokenize(true);
+        let mut parser = Parser::new(tokens);
+        let parsed_tokens = parser.parse_program().unwrap();
+
+        let context = Context::create();
+        let mut codegen = CodeGen::new(&context, "my_module");
+
+        match codegen.compile_program(&parsed_tokens) {
+            Ok(_) => {
+                println!("{}",test_code);
+                println!("{}",codegen.get_ir());
+            }
+            Err(e) => {
+                println!("Code generation error: {}", e);
+                }
+            }
+        }
 }
 
 #[cfg(test)]
